@@ -1,0 +1,75 @@
+FROM arm64v8/ubuntu:18.04
+# Based on:
+#  - https://github.com/open-horizon/cogwerx-jetson-tx2/blob/6460ad638cbe9272a640b514df9fe08490ca8c5a/Dockerfile.cudabase
+#  - https://devtalk.nvidia.com/default/topic/1044051/jetson-agx-xavier/docker-gpu-acceleration-on-jetson-agx-for-ubuntu-16-04-image-using-jetpack-4-4-1/
+# Uncomment to cross-compile on x86 machine
+#COPY qemu-aarch64-static /usr/bin/
+
+# necessary tools
+RUN apt update \
+    && apt install -y curl gnupg lbzip2 sudo && \
+    rm -rf /var/lib/apt/lists/*
+
+# nvidia drivers
+RUN curl -sL https://developer.nvidia.com/embedded/dlc/l4t-jetson-driver-package-32-1-JAX-TX2 | tar xvfj - \
+    && sed -i 's,tar -I lbzip2 -xpmf ${LDK_NV_TEGRA_DIR}/config.tbz2,tar --exclude=etc/host* -I lbzip2 -xpmf ${LDK_NV_TEGRA_DIR}/config.tbz2,' ./Linux_for_Tegra/apply_binaries.sh \
+    && ./Linux_for_Tegra/apply_binaries.sh -r / \
+    && echo "/usr/lib/aarch64-linux-gnu/tegra" > /etc/ld.so.conf.d/nvidia-tegra.conf \
+    && echo "/usr/lib/aarch64-linux-gnu/tegra" > /usr/lib/aarch64-linux-gnu/tegra/ld.so.conf \
+    && echo "/usr/lib/aarch64-linux-gnu/tegra-egl" > /usr/lib/aarch64-linux-gnu/tegra-egl/ld.so.conf \
+    update-alternatives --install \
+        /etc/ld.so.conf.d/aarch64-linux-gnu_GL.conf aarch64-linux-gnu_gl_conf \
+        /usr/lib/aarch64-linux-gnu/tegra/ld.so.conf 1000 && \
+    update-alternatives --install \
+        /etc/ld.so.conf.d/aarch64-linux-gnu_EGL.conf aarch64-linux-gnu_egl_conf \
+        /usr/lib/aarch64-linux-gnu/tegra-egl/ld.so.conf 1000 && \
+    rm -rf ./Linux_for_Tegra
+
+# cuda
+COPY cuda-repo-l4t-10-0-local-10.0.166_1.0-1_arm64.deb .
+RUN dpkg -i ./cuda-repo-l4t-10-0-local-10.0.166_1.0-1_arm64.deb && \
+    apt-key add /var/cuda-repo-10-0-local-10.0.166/7fa2af80.pub && \
+    apt-get update && apt-get install -y cuda-toolkit-10.0 && \
+    rm -rf /etc/apt/sources.list.d/cuda-10-0-local-10.0.166.list \
+           /var/cuda-repo-10-0-local-10.0.166 \
+           ./cuda-repo-l4t-10-0-local-10.0.166_1.0-1_arm64.deb \
+           /var/lib/apt/lists/*
+
+# cudnn
+COPY libcudnn7_7.3.1.28-1+cuda10.0_arm64.deb /tmp
+COPY libcudnn7-dev_7.3.1.28-1+cuda10.0_arm64.deb /tmp
+RUN dpkg -i /tmp/libcudnn7_7.3.1.28-1+cuda10.0_arm64.deb \
+            /tmp/libcudnn7-dev_7.3.1.28-1+cuda10.0_arm64.deb && \
+    rm -rf /tmp/*.deb
+
+# opencv
+COPY libopencv_3.3.1-2-g31ccdfe11_arm64.deb /tmp
+COPY libopencv-python_3.3.1-2-g31ccdfe11_arm64.deb /tmp
+COPY libopencv-dev_3.3.1-2-g31ccdfe11_arm64.deb /tmp
+RUN apt update && \
+    apt install -y /tmp/libopencv_3.3.1-2-g31ccdfe11_arm64.deb \
+        /tmp/libopencv-python_3.3.1-2-g31ccdfe11_arm64.deb \
+        /tmp/libopencv-dev_3.3.1-2-g31ccdfe11_arm64.deb && \
+    rm -rf /var/lib/apt/lists/* /tmp/*.deb
+
+# tensorrt
+COPY libnvinfer-dev_5.0.6-1+cuda10.0_arm64.deb /tmp
+COPY libnvinfer5_5.0.6-1+cuda10.0_arm64.deb /tmp
+COPY libnvinfer-samples_5.0.6-1+cuda10.0_all.deb /tmp
+COPY python-libnvinfer-dev_5.0.6-1+cuda10.0_arm64.deb /tmp
+COPY python-libnvinfer_5.0.6-1+cuda10.0_arm64.deb /tmp
+COPY python3-libnvinfer-dev_5.0.6-1+cuda10.0_arm64.deb /tmp
+COPY python3-libnvinfer_5.0.6-1+cuda10.0_arm64.deb /tmp
+COPY tensorrt_5.0.6.3-1+cuda10.0_arm64.deb /tmp
+RUN apt update && \
+    apt install -y /tmp/libnvinfer-dev_5.0.6-1+cuda10.0_arm64.deb \
+            /tmp/libnvinfer5_5.0.6-1+cuda10.0_arm64.deb \
+            /tmp/libnvinfer-samples_5.0.6-1+cuda10.0_all.deb \
+            /tmp/python-libnvinfer-dev_5.0.6-1+cuda10.0_arm64.deb \
+            /tmp/python-libnvinfer_5.0.6-1+cuda10.0_arm64.deb \
+            /tmp/python3-libnvinfer-dev_5.0.6-1+cuda10.0_arm64.deb \
+            /tmp/python3-libnvinfer_5.0.6-1+cuda10.0_arm64.deb \
+            /tmp/tensorrt_5.0.6.3-1+cuda10.0_arm64.deb && \
+    rm -rf /var/lib/apt/lists/* /tmp/*.deb
+
+CMD ["bash"]
