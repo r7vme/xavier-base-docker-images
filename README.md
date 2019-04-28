@@ -53,14 +53,27 @@ By default Jetpack can be installed only from Ubuntu 16.04 or 18.04. Fortunately
 
 Download sdkmanager deb package from [downloads center](https://developer.nvidia.com/embedded/downloads).
 
-Then unpack and run sdkmanager
+Then unpack
 ```
 ar x sdkmanager_0.9.11-3405_amd64.deb
 tar xf data.tar.xz
-./opt/nvidia/sdkmanager/sdkmanager
 ```
 
-There can be some dependencies missing, but it has no fancy dependecies, so should work on most desktop linux (e.g. in my case only `lbzip2` was missing).
+`lsb-release` also should fake ubuntu. This can be done by installing lsb-release package (e.g. available for Arch) and adding following config to `/etc/lsb-release`.
+
+```
+LSB_VERSION=1.4
+DISTRIB_ID=Ubuntu
+DISTRIB_RELEASE=18.04
+DISTRIB_DESCRIPTION="Ubuntu 18.04.2 LTS"
+```
+
+There can also be some dependencies missing, but it has no fancy dependecies, so should work on most desktop linux (e.g. in my case only `lbzip2` was missing).
+
+Finally run
+```
+./opt/nvidia/sdkmanager/sdkmanager
+```
 
 # flashing w/o sdkmanager
 
