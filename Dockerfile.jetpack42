@@ -47,6 +47,8 @@ COPY libopencv_3.3.1-2-g31ccdfe11_arm64.deb /tmp
 COPY libopencv-python_3.3.1-2-g31ccdfe11_arm64.deb /tmp
 COPY libopencv-dev_3.3.1-2-g31ccdfe11_arm64.deb /tmp
 RUN apt update && \
+    apt install -y python3-numpy \
+                   python-numpy &&
     apt install -y /tmp/libopencv_3.3.1-2-g31ccdfe11_arm64.deb \
         /tmp/libopencv-python_3.3.1-2-g31ccdfe11_arm64.deb \
         /tmp/libopencv-dev_3.3.1-2-g31ccdfe11_arm64.deb && \
