@@ -1,0 +1,64 @@
+FROM ubuntu:bionic
+
+RUN apt update \
+    && apt install -y \
+        aria2 \
+        bc \
+        build-essential \
+        git-core \
+        kmod \
+        lbzip2 \
+        python \
+        sudo \
+        xxd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download toolchain for crosscompilation.
+RUN aria2c -x 10 https://developer.nvidia.com/embedded/dlc/l4t-gcc-7-3-1-toolchain-64-bit \
+    && tar xf gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu.tar.xz \
+    && rm -f gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu.tar.xz
+
+# Download Jetson drivers and root filesystem.
+RUN aria2c -x 10 \
+        https://developer.nvidia.com/embedded/dlc/Jetson_Linux_R32.2.1 \
+    && aria2c -x 10 \
+        https://developer.nvidia.com/embedded/dlc/r32-2-1_Release_v1.0/TX2-AGX/Tegra_Linux_Sample-Root-Filesystem_R32.2.1_aarch64.tbz2 \
+    && tar xpf Jetson_Linux_R32.2.1_aarch64.tbz2 \
+    && cd Linux_for_Tegra/rootfs \
+    && tar xpf ../../Tegra_Linux_Sample-Root-Filesystem_R32.2.1_aarch64.tbz2 \
+    && rm -f Tegra_Linux_Sample-Root-Filesystem_R32.2.1_aarch64.tbz2 Jetson_Linux_R32.2.1_aarch64.tbz2
+
+WORKDIR /Linux_for_Tegra
+
+# Download kernel sources.
+RUN ./source_sync.sh -k tegra-l4t-r32.2.1
+
+ENV CROSS_COMPILE="/gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-"
+ENV KERNEL_SRC_DIR="/Linux_for_Tegra/sources/kernel/kernel-4.9"
+ENV KERNEL_OUT_DIR="/Linux_for_Tegra/kernel"
+ENV ROOTFS_DIR="/Linux_for_Tegra/rootfs"
+
+# Apply PREEMPT_RT patches
+RUN cd ${KERNEL_SRC_DIR}/scripts && ./rt-patch.sh apply-patches && cd -
+
+# Compile kernel and install modules.
+RUN cd ${KERNEL_SRC_DIR} \
+ && mkdir ${KERNEL_SRC_DIR}/build \
+ && make ARCH=arm64 O=${KERNEL_SRC_DIR}/build tegra_defconfig \
+ && make ARCH=arm64 O=${KERNEL_SRC_DIR}/build CROSS_COMPILE=${CROSS_COMPILE} -j4
+RUN cd ${KERNEL_SRC_DIR} \
+ && make ARCH=arm64 O=${KERNEL_SRC_DIR}/build INSTALL_MOD_STRIP=1 CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH=${ROOTFS_DIR} modules_install
+
+# Generate image for default kernel (w/o realtime patches) first
+RUN ./apply_binaries.sh
+RUN FAB=400 BOARDID=2888 FUSELEVEL=fuselevel_production BOARDSKU=0001 BOARDREV=H.0 ./build_l4t_bup.sh jetson-xavier mmcblk0p1
+RUN cp bootloader/payloads_t19x/bl_update_payload bootloader/payloads_t19x/bl_update_payload_default
+
+# Copy kernel and modules to final destination.
+RUN tar -C ${ROOTFS_DIR} -cjf ${KERNEL_OUT_DIR}/kernel_supplements.tbz2 lib/modules \
+ && cp ${KERNEL_SRC_DIR}/build/arch/arm64/boot/Image ${KERNEL_OUT_DIR}
+
+# Prepare rootfs.
+RUN ./apply_binaries.sh
+# Generate OTA update image.
+RUN FAB=400 BOARDID=2888 FUSELEVEL=fuselevel_production BOARDSKU=0001 BOARDREV=H.0 ./build_l4t_bup.sh jetson-xavier mmcblk0p1
